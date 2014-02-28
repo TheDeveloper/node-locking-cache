@@ -2,11 +2,21 @@
 
 var LRU = require("lru-cache");
 
-module.exports = function(LRUConf) {
+module.exports = function(LRUConf, opts) {
   var locks = LRU(), cache;
 
   if (typeof LRUConf === "function") cache = LRUConf();
   else cache = LRU(LRUConf);
+
+  var conf = {
+    maxCallbacks: 1000
+  };
+
+  if (typeof opts === 'object'){
+    for ( var i in opts ){
+      conf[i] = opts[i];
+    }
+  }
 
   return function locked(fn) {
     return function() {
@@ -36,6 +46,14 @@ module.exports = function(LRUConf) {
 
         var callbacks;
         if ((callbacks = locks.get(key))) {
+
+          // invoke callback with an error if we've hit the callback queue limit
+          if (callbacks.length >= conf.maxCallbacks){
+            return setImmediate(function(){
+              return callback(new Error('callback queue limit reached'));
+            });
+          }
+
           // already cached
           callbacks.push(callback);
           locks.set(key, callbacks);
